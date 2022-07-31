@@ -1,8 +1,9 @@
-from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QWidget, QGridLayout, QMessageBox, QListWidget, QListWidgetItem, QTreeWidgetItem, QStyle, QMenu
+from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QWidget, QGridLayout, QMessageBox, QListWidget, QListWidgetItem, QTreeWidgetItem, QStyle, QMenu, QFileDialog
 from PySide6.QtCore import Qt, QCoreApplication, QSize, Slot, Signal
 from PySide6.QtGui import QPixmap, QIcon, QCloseEvent
 import sys, os
 from PIL import ImageQt, Image
+import zipfile as zf
 
 
 class MyApp(QMainWindow):
@@ -13,7 +14,6 @@ class MyApp(QMainWindow):
 
     self.setWindowTitle(self.tr('MyApp'))
     self.currentDir = os.getcwd()
-    self.filelistViewItems: list[QListWidgetItem] = []
 
     self.initGUI()
 
@@ -41,7 +41,7 @@ class MyApp(QMainWindow):
 
     menu = QMenu()
     menu.addAction(self.tr('Extract'))
-    menu.addAction(self.tr('Create zip file'))
+    menu.addAction(self.tr('Create zip file'), self.onCreateZip)
     menu.addAction(self.tr('Create 7z file'))
     menu.addAction(self.tr('Create tar.gz file'))
     menu.addAction(self.tr('Create tar.xz file'))
@@ -51,13 +51,26 @@ class MyApp(QMainWindow):
     btn.clicked.connect(self.debugClicked)
     self.mainLayout.addWidget(btn, 1, 0)
 
+  def onCreateZip(self):
+    print('create zip')
+    fpath = QFileDialog.getSaveFileName(self, self.tr('Select zip file path'),
+                                        self.currentDir,
+                                        self.tr('Zip file (*.zip)'))
+    zipFile = zf.ZipFile(fpath[0], 'w', zf.ZIP_DEFLATED, compresslevel=0)
+    zf.ZIP_STORED
+    for item in self.fileListView.selectedItems():
+      data = item.data(Qt.UserRole)
+      print(data)
+      fname = data['path']
+      zipFile.write(fname, os.path.basename(fname))
+    zipFile.close()
+
     # self.label.setContextMenuPolicy(Qt.CustomContextMenu)
   def debugClicked(self):
     si = self.fileListView.selectedItems()
     print(si)
 
   def onFileListViewContextMenu(self, pos):
-    print(pos)
     items = self.fileListView.selectedItems()
     for item in items:
       print(item.data(Qt.UserRole))
@@ -89,12 +102,10 @@ class MyApp(QMainWindow):
       item.setIcon(icon)
       # item.setSizeHint(QSize(100, 100))
       # self.fileListView.addItem(file)
-      self.filelistViewItems.append(item)
 
   @Slot(QListWidgetItem)
   def onItemDoubleClicked(self, item: QListWidgetItem):
     data = item.data(Qt.UserRole)
-    print('item:', data)
     if data is None:
       return
     if data["isDir"]:

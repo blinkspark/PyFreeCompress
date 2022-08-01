@@ -5,7 +5,6 @@ import sys, os
 from PIL import ImageQt, Image
 import zipfile as zf
 
-
 class MyApp(QMainWindow):
   updateFileListSignal = Signal()
 
@@ -52,18 +51,30 @@ class MyApp(QMainWindow):
     self.mainLayout.addWidget(btn, 1, 0)
 
   def onCreateZip(self):
-    print('create zip')
     fpath = QFileDialog.getSaveFileName(self, self.tr('Select zip file path'),
                                         self.currentDir,
                                         self.tr('Zip file (*.zip)'))
-    zipFile = zf.ZipFile(fpath[0], 'w', zf.ZIP_DEFLATED, compresslevel=0)
-    zf.ZIP_STORED
+    self.makeZip(fpath)
+
+  def makeZip(self, fpath, comporessionType=zf.ZIP_DEFLATED, compressLevel=9):
+    zipFile = zf.ZipFile(fpath[0], 'w', comporessionType, compresslevel=compressLevel)
     for item in self.fileListView.selectedItems():
       data = item.data(Qt.UserRole)
-      print(data)
       fname = data['path']
-      zipFile.write(fname, os.path.basename(fname))
+      if data['isDir']:
+        self.writeZipDir(fname, os.path.basename(fname), zipFile)
+      else:
+        zipFile.write(fname, os.path.join(os.path.basename(fname)))
     zipFile.close()
+    print('zip file created')
+
+  def writeZipDir(self, dirPath, dirName, zipFile):
+    for fname in os.listdir(dirPath):
+      fpath = os.path.join(dirPath, fname)
+      if os.path.isdir(fpath):
+        self.writeZipDir(fpath, os.path.join(dirName, fname), zipFile)
+      else:
+        zipFile.write(fpath, os.path.join(dirName, fname))
 
     # self.label.setContextMenuPolicy(Qt.CustomContextMenu)
   def debugClicked(self):
@@ -134,7 +145,6 @@ def main():
   app = QApplication(sys.argv)
   mainWindow = MyApp()
   mainWindow.show()
-
   sys.exit(app.exec())
 
 

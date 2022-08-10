@@ -1,11 +1,11 @@
-from tracemalloc import take_snapshot
 from PySide6.QtWidgets import QApplication, QMainWindow, QLabel, QPushButton, QWidget, QGridLayout, QMessageBox, QListWidget, QListWidgetItem, QTreeWidgetItem, QStyle, QMenu, QFileDialog, QProgressDialog
 from PySide6.QtCore import Qt, QCoreApplication, QSize, Slot, Signal
 from PySide6.QtGui import QPixmap, QIcon, QCloseEvent
 import sys, os
 from os import path
 from PIL import ImageQt, Image
-import zipfile as zf
+from zipfile import ZIP_DEFLATED, ZipFile
+from py7zr import SevenZipFile
 
 
 class MyApp(QMainWindow):
@@ -16,6 +16,7 @@ class MyApp(QMainWindow):
 
     self.setWindowTitle(self.tr('MyApp'))
     self.currentDir = os.getcwd()
+    self.cancelComporess = False
 
     self.initGUI()
 
@@ -44,9 +45,9 @@ class MyApp(QMainWindow):
     menu = QMenu()
     menu.addAction(self.tr('Extract'))
     menu.addAction(self.tr('Create zip file'), self.onCreateZip)
-    menu.addAction(self.tr('Create 7z file'))
-    menu.addAction(self.tr('Create tar.gz file'))
-    menu.addAction(self.tr('Create tar.xz file'))
+    menu.addAction(self.tr('Create 7z file'), self.onCreate7z)
+    # menu.addAction(self.tr('Create tar.gz file'))
+    # menu.addAction(self.tr('Create tar.xz file'))
     self.fileListViewContextMenu = menu
 
     btn = QPushButton(self.tr('Debug'), self)
@@ -67,6 +68,8 @@ class MyApp(QMainWindow):
     for item in self.fileListView.selectedItems():
       data = item.data(Qt.UserRole)
       fname = data['path']
+      if fname == '..':
+        continue
       if data['isDir']:
         # self.writeZipDir(fname, path.basename(fname), zipFile)
         tds = self.walkDir(fname)
@@ -77,27 +80,23 @@ class MyApp(QMainWindow):
         taskData.append(td)
     return taskData
 
-  def onCreateZip(self):
-    fpath = QFileDialog.getSaveFileName(self, self.tr('Select zip file path'),
+  def onCreate7z(self):
+    fpath = QFileDialog.getSaveFileName(self, self.tr('Select 7zip file path'),
                                         self.currentDir,
-                                        self.tr('Zip file (*.zip)'))
-    self.makeZip(fpath[0])
+                                        self.tr('7zip file (*.7z)'))
+    if fpath[0] == '':
+      return
+    self.make7z(fpath[0])
 
-  def makeZip(self,
-              fpath: str,
-              comporessionType=zf.ZIP_DEFLATED,
-              compressLevel=6):
-    zipFile = zf.ZipFile(fpath,
-                         'w',
-                         comporessionType,
-                         compresslevel=compressLevel)
+  def make7z(self, fpath: str):
+    zipFile = SevenZipFile(fpath, 'w')
     taskData = self.getTaskData()
     taskCount = len(taskData)
     progressDialog = QProgressDialog(self.tr('Compressing...'),
-                                     self.tr('Cancel'), 0, taskCount)
-    progressDialog.setWindowModality(Qt.ApplicationModal)
+                                     self.tr('Cancel'), 0, taskCount, self)
+    progressDialog.setWindowTitle(self.tr('Compressing...'))
+    progressDialog.setWindowModality(Qt.WindowModal)
     progressDialog.setMinimumDuration(1)
-    progressDialog.can
     # progressDialog.setValue(0)
     progressDialog.show()
     for (i, td) in enumerate(taskData):
@@ -105,18 +104,44 @@ class MyApp(QMainWindow):
       progressDialog.setValue(i + 1)
       progressDialog.setLabelText(path.basename(td[1]))
       zipFile.write(td[0], td[1])
-      # time.sleep(0.1)
+      if progressDialog.wasCanceled():
+        break
     zipFile.close()
 
-  def writeZipDir(self, dirPath, dirName, zipFile):
-    for fname in os.listdir(dirPath):
-      fpath = path.join(dirPath, fname)
-      if path.isdir(fpath):
-        self.writeZipDir(fpath, path.join(dirName, fname), zipFile)
-      else:
-        zipFile.write(fpath, path.join(dirName, fname))
+  def onCreateZip(self):
+    fpath = QFileDialog.getSaveFileName(self, self.tr('Select zip file path'),
+                                        self.currentDir,
+                                        self.tr('Zip file (*.zip)'))
+    if fpath[0] == '':
+      return
+    self.makeZip(fpath[0])
 
-    # self.label.setContextMenuPolicy(Qt.CustomContextMenu)
+  def makeZip(self,
+              fpath: str,
+              comporessionType=ZIP_DEFLATED,
+              compressLevel=6):
+    zipFile = ZipFile(fpath,
+                         'w',
+                         comporessionType,
+                         compresslevel=compressLevel)
+    taskData = self.getTaskData()
+    taskCount = len(taskData)
+    progressDialog = QProgressDialog(self.tr('Compressing...'),
+                                     self.tr('Cancel'), 0, taskCount, self)
+    progressDialog.setWindowTitle(self.tr('Compressing...'))
+    progressDialog.setWindowModality(Qt.WindowModal)
+    progressDialog.setMinimumDuration(1)
+    # progressDialog.setValue(0)
+    progressDialog.show()
+    for (i, td) in enumerate(taskData):
+      print(i + 1, taskCount, td)
+      progressDialog.setValue(i + 1)
+      progressDialog.setLabelText(path.basename(td[1]))
+      zipFile.write(td[0], td[1])
+      if progressDialog.wasCanceled():
+        break
+    zipFile.close()
+
   def debugClicked(self):
     for item in self.fileListView.selectedItems():
       data = item.data(Qt.UserRole)
